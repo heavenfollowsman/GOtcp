@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,30 +48,41 @@ func (s *Server) Start() {
 	}
 }
 
-// handleConnection 读取信息，打印并保存日志文件
+// handleConnection   先读取要发送的数据的长度，再发送信息 读取信息，打印并保存日志文件
 func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
-
 	reader := bufio.NewReader(conn)
 
 	for {
-		messageTxt, err := reader.ReadString('\n')
+		//读取消息长度
+		lengthBuf := make([]byte, 4)
+		// 这一步lengthBuf中的数值已经改变了 这个函数的返回值是接受的长度
+		_, err := io.ReadFull(reader, lengthBuf)
 
 		if err != nil {
 			if err == io.EOF {
 				// 正常关闭连接时，打印信息并退出循环
-				fmt.Println("读取信息完毕")
+				fmt.Println("连接被关闭")
 				return
 			}
 			// 处理其他错误
-			fmt.Println("读取信息失败:", err)
+			fmt.Println("长度读取失败:", err)
+			return
+		}
+
+		length := binary.BigEndian.Uint32(lengthBuf)
+		messageTxt := make([]byte, length)
+
+		_, err = io.ReadFull(reader, messageTxt)
+		if err != nil {
+			fmt.Println("消息读取失败:", err)
 			return
 		}
 
 		var log message.LogMessage
 
 		// 网络传输数据的时候 以json格式传输 这里进行反序列化  将json字符串转化为go中的结构体格式
-		if err := json.Unmarshal([]byte(messageTxt), &log); err != nil {
+		if err := json.Unmarshal(messageTxt, &log); err != nil {
 			fmt.Println("反序列化失败:", err)
 			continue
 		}

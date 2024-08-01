@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"loggingProject/message"
@@ -12,8 +13,22 @@ type MyEncoder struct{}
 
 // 实现Encode接口 输入信息和连接  返回错误信息
 func (s *MyEncoder) Encode(data []byte, w io.Writer) error {
-	// 将数据写入io.writer
-	_, err := w.Write(data)
+
+	// 发送长度数据
+	length := uint32(len(data))
+	lengthBuf := make([]byte, 4)
+
+	// 好像这样能防止粘包，虽然不知道原理
+	binary.BigEndian.PutUint32(lengthBuf, length)
+
+	// 发送长度数据
+	_, err := w.Write(lengthBuf)
+	if err != nil {
+		return err
+	}
+
+	// 发送具体数据
+	_, err = w.Write(data)
 	return err
 }
 
@@ -38,7 +53,6 @@ func main() {
 	// 序列化 LogMessage
 	b := make([]byte, 1024)
 	l, err := m.MarshalTo(b)
-
 	if err != nil {
 		fmt.Println("序列化失败:", err)
 		return
